@@ -125,3 +125,11 @@ def test_roi_name_parsing():
     from cmjsc.labels import parse_roi
     d = parse_roi("B10_x3781_x900002_x4m_r_trace_2_xorigin_54016_yorigin_1024")
     assert d["OST_label"] == "x4m" and d["trace"] == 2 and d["side"] == "r"
+
+
+def test_dirty_check_ignores_registry_first_line(monkeypatch):
+    from cmjsc import provenance
+    monkeypatch.setattr(provenance, "_porcelain", lambda: ["registry/runs.tsv"])
+    assert provenance.git_state()["dirty"] is False
+    monkeypatch.setattr(provenance, "_porcelain", lambda: ["registry/runs.tsv", "python/x.py"])
+    assert provenance.git_state()["dirty"] is True

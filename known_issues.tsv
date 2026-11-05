@@ -1,1 +1,2 @@
 issue_id	title	introduced_commit	fixed_commit	affects	status	details
+KI-001	Dirty check ignores registry/runs.tsv only if it is not the first changed file	17822b1	<FIX>	start of convert/morphometry (refuses to run; no data affected)	fixed	git status --porcelain output was stripped; the leading space of the first status code was lost and the path was cut wrong.

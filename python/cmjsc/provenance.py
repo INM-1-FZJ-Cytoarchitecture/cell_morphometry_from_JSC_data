@@ -23,10 +23,19 @@ def _git(*args) -> str:
         return ""
 
 
+def _porcelain() -> list[str]:
+    """Changed paths from `git status --porcelain` (lines 'XY path'; not stripped,
+    because a leading space is part of the status code - see KI-001)."""
+    try:
+        out = subprocess.run(["git", "-C", str(REPO_DIR), "status", "--porcelain"],
+                             capture_output=True, text=True, timeout=30).stdout
+    except Exception:
+        return []
+    return [l[3:] for l in out.splitlines() if len(l) > 3]
+
+
 def git_state() -> dict:
-    status = _git("status", "--porcelain")
-    dirty_files = [l[3:] for l in status.splitlines()
-                   if l and not any(l[3:].startswith(p) for p in IGNORE_DIRTY)]
+    dirty_files = [f for f in _porcelain() if not any(f.startswith(p) for p in IGNORE_DIRTY)]
     return {
         "repo": str(REPO_DIR),
         "remote": _git("config", "--get", "remote.origin.url"),

@@ -2,6 +2,14 @@
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), versions = git tags.
 
+## [1.0.1] - 2026-11-05
+### Fixed
+- KI-001: the "uncommitted changes" check misread the first line of
+  `git status --porcelain` (leading space removed), so a modified
+  `registry/runs.tsv` was not ignored when it was the only/first change and
+  `build_morphometric_results` refused to start. Fixed in Python and MATLAB;
+  test added. No results were affected (the check only blocks a start).
+
 ## [1.0.0] - 2026-11-05
 ### Added
 - `cmjsc convert`: JSC H5 -> `CellSegmentations.zip` (cellseg layer format) +
