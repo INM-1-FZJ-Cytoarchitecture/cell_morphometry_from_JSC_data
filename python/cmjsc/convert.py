@@ -24,7 +24,8 @@ MANIFEST = "archive_manifest.tsv"
 VERIF = "verification.tsv"
 LEDGER_F = ["roi_stem", "status", "n_cells", "n_layers", "seconds", "finished", "message"]
 MANIFEST_F = ["roi_stem", "h5_local_path", "h5_jsc_path_derived", "job", "size_bytes", "sha256",
-              "mtime", "archive_path", "archive_sha256", "archive_checked_at", "archive_status"]
+              "mtime", "roi_tif_path", "roi_tif_size_bytes", "mask_path", "mask_sha256",
+              "archive_path", "archive_sha256", "archive_checked_at", "archive_status"]
 VERIF_F = ["roi_stem", "n_cells_h5", "n_cells_zip", "n_empty_polygons", "n_layers",
            "zip_roundtrip_exact", "frac_area_exact", "n_area_diff", "max_abs_area_diff",
            "h5_bytes", "zip_bytes", "tsv_bytes", "density_bytes", "output_fraction_of_h5", "status"]
@@ -158,7 +159,8 @@ def process_roi(h5_path, stem, roi_dir, mask_dir, seg_dir, qc_dir, fs, opt, prov
         tifffile.imwrite(dpath, dm, compression="zlib")
         density_bytes = dpath.stat().st_size
     if qc_dir is not None and layers:
-        _qc_overlay(roi_tif, layers, qc_dir / f"{stem}_overlay.png")
+        _qc_overlay(roi_tif, layers, qc_dir / f"{stem}_overlay.png",
+                    centre=(float(np.median(df["y_px"])), float(np.median(df["x_px"]))))
     del layers
     json.dump({
         "Description": "Cell instance masks rasterised from the CPN contours of a JSC H5. "
@@ -194,21 +196,27 @@ def process_roi(h5_path, stem, roi_dir, mask_dir, seg_dir, qc_dir, fs, opt, prov
     return ver, time.time() - t0
 
 
-def _qc_overlay(roi_tif, layers, out_png, crop=2000):
+def _qc_overlay(roi_tif, layers, out_png, crop=2000, centre=None):
+    """Crop (crop x crop px) around the median cell position with cell outlines
+    (red = layer 0, orange = further layers)."""
     import cv2
     img = tifffile.imread(roi_tif)
     if img.ndim > 2:
         img = img[..., 0]
     r, c = img.shape
-    r0, c0 = max(0, r // 2 - crop // 2), max(0, c // 2 - crop // 2)
+    cr, cc = centre if centre is not None else (r / 2, c / 2)
+    r0 = int(min(max(0, cr - crop / 2), max(0, r - crop)))
+    c0 = int(min(max(0, cc - crop / 2), max(0, c - crop)))
     sl = (slice(r0, r0 + crop), slice(c0, c0 + crop))
     rgb = cv2.cvtColor(img[sl], cv2.COLOR_GRAY2BGR)
     for k, layer in enumerate(layers):
         lab = layer[sl].astype(np.int32)
-        edge = np.zeros(lab.shape, bool)
-        edge[:-1, :] |= lab[:-1, :] != lab[1:, :]
-        edge[:, :-1] |= lab[:, :-1] != lab[:, 1:]
-        edge &= lab > 0
+        d = np.zeros(lab.shape, bool)
+        d[:-1, :] |= lab[:-1, :] != lab[1:, :]
+        d[1:, :] |= lab[1:, :] != lab[:-1, :]
+        d[:, :-1] |= lab[:, :-1] != lab[:, 1:]
+        d[:, 1:] |= lab[:, 1:] != lab[:, :-1]
+        edge = d & (lab > 0)
         rgb[edge] = (0, 0, 255) if k == 0 else (0, 200, 255)
     cv2.imwrite(str(out_png), rgb)
 
@@ -265,7 +273,7 @@ def run(args) -> int:
 
     done = {r["roi_stem"] for r in _read_tsv(out_dir / LEDGER) if r["status"] in DONE}
     now = time.time()
-    files = sorted(p for p in h5_dir.glob("*.h5") if not p.name.startswith("."))
+    files = sorted(p for p in h5_dir.glob(args.pattern) if p.suffix == ".h5" and not p.name.startswith("."))
     todo, waiting = [], []
     for p in files:
         if p.stem in done:
@@ -298,6 +306,11 @@ def run(args) -> int:
             mrow = {"roi_stem": stem, "h5_local_path": str(p),
                     "h5_jsc_path_derived": f"{jsc_base}/{h5_dir.name}/{p.name}" if jsc_base else "",
                     "job": job, "size_bytes": st.st_size, "sha256": sha, "mtime": st.st_mtime,
+                    "roi_tif_path": str(Path(args.roi_dir) / f"{stem}.tif"),
+                    "roi_tif_size_bytes": (Path(args.roi_dir) / f"{stem}.tif").stat().st_size,
+                    "mask_path": str(Path(args.mask_dir) / f"{stem}_mask.tif"),
+                    "mask_sha256": sha256_file(Path(args.mask_dir) / f"{stem}_mask.tif")
+                    if (Path(args.mask_dir) / f"{stem}_mask.tif").exists() else "",
                     "archive_path": "", "archive_sha256": "", "archive_checked_at": "",
                     "archive_status": ""}
             qc = qc_dir if (args.qc_every and (len(done) + i - 1) % args.qc_every == 0) else None
@@ -339,8 +352,10 @@ def run(args) -> int:
     h5b = sum(int(r["h5_bytes"]) for r in ver_rows)
     outb = sum(int(r["zip_bytes"]) + int(r["tsv_bytes"]) + int(r["density_bytes"]) for r in ver_rows)
     prov["finished"] = provenance.now()
+    stem_set = set(stems)
+    n_files_done = sum(p.stem in stem_set for p in files)
     prov["status"] = "complete" if not waiting and status_counts.get("error", 0) == 0 \
-        and len(stems) == len(files) else "partial"
+        and n_files_done == len(files) and args.pattern == "*.h5" else "partial"
     prov["summary"] = {"h5_files_seen": len(files), "rois_converted": len(stems),
                        "status_counts": status_counts, "h5_too_new_skipped": len(waiting),
                        "h5_total_bytes": h5b, "output_total_bytes": outb,
@@ -355,7 +370,7 @@ def run(args) -> int:
                      "feature_set_sha256": fs["sha256"], "n_rois_ok": len(stems),
                      "n_rois_error": status_counts.get("error", 0),
                      "notes": f"session {len(prov['sessions'])}, status {prov['status']}"})
-    log.info("done: %s | converted %d of %d | errors %d | output %.1f %% of H5 size",
-             prov["status"], len(stems), len(files), status_counts.get("error", 0),
+    log.info("done: %s | converted %d of %d H5 (run total %d) | errors %d | output %.1f %% of H5 size",
+             prov["status"], n_files_done, len(files), len(stems), status_counts.get("error", 0),
              100 * outb / h5b if h5b else 0)
     return 0 if n_err == 0 else 1

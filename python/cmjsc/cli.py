@@ -29,6 +29,7 @@ def main(argv=None) -> int:
                    help="min. fraction of cells whose rasterised area equals the H5 area")
     c.add_argument("--min-age-min", type=float, default=5.0, help="skip H5 modified less than N minutes ago")
     c.add_argument("--qc-every", type=int, default=100, help="QC overlay for every n-th ROI (0 = off)")
+    c.add_argument("--pattern", default="*.h5", help="glob for H5 names (e.g. B1_*.h5)")
     c.add_argument("--limit", type=int, default=0)
     c.add_argument("--allow-dirty", action="store_true")
 
