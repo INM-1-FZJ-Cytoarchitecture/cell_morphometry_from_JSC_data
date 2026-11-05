@@ -1,0 +1,40 @@
+# Feature sets for `cmjsc convert`.
+#
+# RULE: never edit or delete an existing set. To change the default, add a new
+# set (e.g. thalamus_v2) and point `default` to it. Every run records the set
+# name and the SHA-256 of its definition in PROVENANCE.json, so older runs stay
+# reproducible with the commit that produced them.
+#
+# h5_columns: raw dataset names in the JSC H5 (skimage regionprops, raw values).
+#   ALL = every 1-D dataset of the H5 plus uncertainties-0..3.
+# Position is always skimage centroid-0 (row, y) / centroid-1 (col, x);
+# CPN "location" is never used.
+
+schema_version: 1
+default: thalamus_v1
+
+sets:
+  thalamus_v1:
+    added: "2026-11-05"
+    description: >-
+      Per-cell features of the Thalamus morphometry
+      (extract_morphometric_features.m, 2026-04): area, perimeter,
+      feret_diameter_max, eccentricity, solidity, intensity_mean,
+      intensity_std; position from skimage centroid.
+    h5_columns:
+      - centroid-0
+      - centroid-1
+      - area
+      - perimeter
+      - eccentricity
+      - solidity
+      - feret_diameter_max
+      - intensity_mean
+      - intensity_std
+
+  complete:
+    added: "2026-11-05"
+    description: >-
+      All per-cell values stored in the H5 (skimage regionprops 'all',
+      detection scores, region ids, box uncertainties).
+    h5_columns: ALL
