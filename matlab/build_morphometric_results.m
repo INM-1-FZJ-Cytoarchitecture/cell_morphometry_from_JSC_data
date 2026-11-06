@@ -24,6 +24,10 @@ function out = build_morphometric_results(varargin)
 %     'parallel'         false
 %     'project'          ''
 %     'allow_dirty'      false (refuse to run from a repo with uncommitted changes)
+%     'exclude_list'     '' | JBA_TA exclude list (.xlsx). If given, include_row
+%                        is taken from this list (matched by brain_id, section_number,
+%                        OST_id, OST_label, side, trace) instead of cellseg_labels.tsv,
+%                        e.g. a newer _edit list. Unmatched ROIs get include_row 0.
 %
 %   Outputs in OUT: feature_vector_csv/, morphometric_results/
 %   {all_morphometric_features, weighted_morphometric_results}.{csv,xlsx},
@@ -40,6 +44,7 @@ addParameter(p, 'texture_weighted', '', @(x) ischar(x) || isstring(x));
 addParameter(p, 'parallel', false);
 addParameter(p, 'project', '', @(x) ischar(x) || isstring(x));
 addParameter(p, 'allow_dirty', false);
+addParameter(p, 'exclude_list', '', @(x) ischar(x) || isstring(x));
 parse(p, varargin{:});
 o = p.Results;
 o.convert_run = char(o.convert_run); o.mask_dir = char(o.mask_dir); o.out_dir = char(o.out_dir);
@@ -63,6 +68,20 @@ L = readtable(fullfile(o.convert_run, 'cellseg_labels.tsv'), 'FileType', 'text',
     'Delimiter', '\t', 'TextType', 'string');
 for v = {'roi_stem','brain_id','section_number','OST_id','OST_label','side'}
     L.(v{1}) = string(L.(v{1}));
+end
+if ~isempty(char(o.exclude_list))
+    E = readtable(char(o.exclude_list), 'TextType', 'string');
+    for v = {'brain_id','section_number','OST_id','OST_label','side'}
+        E.(v{1}) = string(E.(v{1}));
+    end
+    kE = E.brain_id + "|" + E.section_number + "|" + E.OST_id + "|" + E.OST_label + "|" + E.side + "|" + string(E.trace);
+    kL = L.brain_id + "|" + L.section_number + "|" + L.OST_id + "|" + L.OST_label + "|" + L.side + "|" + string(L.trace);
+    [tf, loc] = ismember(kL, kE);
+    old = L.include_row;
+    L.include_row = zeros(height(L), 1);
+    L.include_row(tf) = E.include_row(loc(tf));
+    logm(flog, sprintf('include_row from %s: %d matched, %d not in list (-> 0), %d changed vs. convert run', ...
+        char(o.exclude_list), sum(tf), sum(~tf), sum(L.include_row ~= old)));
 end
 n = height(L);
 logm(flog, sprintf('cmjsc morphometry | repo %s (%s) | convert run %s | %d ROIs | trim %s', ...
@@ -106,6 +125,13 @@ end
 writetable(F, fullfile(res_dir, 'all_morphometric_features.csv'));
 try, writetable(F, fullfile(res_dir, 'all_morphometric_features.xlsx')); catch, end
 
+% include_row as used for THIS run (also when taken from 'exclude_list')
+[tfI, locI] = ismember(F.roi_stem, L.roi_stem);
+F.include_row(tfI) = L.include_row(locI(tfI));
+z = F.roi_stem(F.n_cells == 0 & F.include_row == 1);
+if ~isempty(z)
+    logm(flog, sprintf('WARNING: %d included ROI(s) without any cell: %s', numel(z), strjoin(z, ', ')));
+end
 % ---- weighted mean (calculate_wmean logic) --------------------------------
 Fi = F(F.include_row == 1, :);
 logm(flog, sprintf('include_row filter: %d -> %d rows', height(F), height(Fi)));
@@ -164,7 +190,8 @@ prov.toolboxes = arrayfun(@(t) sprintf('%s %s', t.Name, t.Version), ver, 'Unifor
 prov.host = getenv('COMPUTERNAME'); prov.user = getenv('USERNAME');
 prov.inputs = struct('convert_run', o.convert_run, 'convert_provenance', cp, ...
     'convert_provenance_sha256', local_sha256(cp), 'mask_dir', o.mask_dir, ...
-    'texture_weighted', o.texture_weighted, 'texture_weighted_sha256', local_sha256(o.texture_weighted));
+    'texture_weighted', o.texture_weighted, 'texture_weighted_sha256', local_sha256(o.texture_weighted), ...
+    'exclude_list', char(o.exclude_list), 'exclude_list_sha256', local_sha256(char(o.exclude_list)));
 prov.parameters = struct('percentile_trim', o.percentile_trim, 'pixel_size_mm', o.pixel_size_mm, ...
     'weight', 'mask_area_px', 'groups', 'brain_id,section_number,OST_label,OST_id,side', ...
     'positions', 'skimage centroid (x_px, y_px)');

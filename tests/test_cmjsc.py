@@ -146,3 +146,24 @@ def test_special_trace_mask_resolved(job):
     rows = list(csv.DictReader(open(tmp / "out" / "run1" / "archive_manifest.tsv"), delimiter="\t"))
     assert rows[0]["mask_path"].endswith(f"{stem}_special_trace_mask.tif")
     assert len(rows[0]["mask_sha256"]) == 64
+
+
+def test_empty_h5_is_flagged(job):
+    """KI-002: an H5 without detections is converted but flagged empty_h5."""
+    tmp, stem, _ = job
+    p = tmp / "h5" / f"{stem}.h5"
+    with h5py.File(p, "w") as f:
+        f.attrs["complete"] = True
+        f.attrs["num_detections"] = 0
+        f["contours"] = np.zeros((0, 224, 2), np.float32)
+        for k in ("area", "centroid-0", "centroid-1", "perimeter", "eccentricity", "solidity",
+                  "feret_diameter_max", "intensity_mean", "intensity_std"):
+            f[k] = np.zeros(0)
+        f["scores"] = np.zeros(0, np.float32)
+        f["region_ids"] = np.zeros(0, np.int64)
+    assert _convert(tmp) == 0
+    run = tmp / "out" / "run1"
+    ver = list(csv.DictReader(open(run / "verification.tsv"), delimiter="\t"))
+    assert ver[0]["status"] == "empty_h5" and ver[0]["n_cells_h5"] == "0"
+    df = pd.read_csv(run / "cell_segmentations" / f"{stem}_CellInstances.tsv.gz", sep="\t")
+    assert len(df) == 0 and "cell_area_px" in df.columns

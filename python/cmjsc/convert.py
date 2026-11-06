@@ -29,7 +29,7 @@ MANIFEST_F = ["roi_stem", "h5_local_path", "h5_jsc_path_derived", "job", "size_b
 VERIF_F = ["roi_stem", "n_cells_h5", "n_cells_zip", "n_empty_polygons", "n_layers",
            "zip_roundtrip_exact", "frac_area_exact", "n_area_diff", "max_abs_area_diff",
            "h5_bytes", "zip_bytes", "tsv_bytes", "density_bytes", "output_fraction_of_h5", "status"]
-DONE = {"ok", "verify_warn"}
+DONE = {"ok", "verify_warn", "empty_h5"}
 
 log = logging.getLogger("cmjsc")
 
@@ -192,7 +192,7 @@ def process_roi(h5_path, stem, roi_dir, mask_dir, seg_dir, qc_dir, fs, opt, prov
            "max_abs_area_diff": int(np.abs(diff).max()) if n else 0, "h5_bytes": h5b,
            "zip_bytes": zb, "tsv_bytes": tb, "density_bytes": density_bytes,
            "output_fraction_of_h5": f"{(zb + tb + density_bytes) / h5b:.4f}",
-           "status": "ok" if ok else "verify_warn"}
+           "status": "empty_h5" if n == 0 else ("ok" if ok else "verify_warn")}
     return ver, time.time() - t0
 
 

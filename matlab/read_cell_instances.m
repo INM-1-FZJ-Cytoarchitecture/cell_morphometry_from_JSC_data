@@ -14,4 +14,11 @@ end
 opts = detectImportOptions(src, 'FileType', 'text', 'Delimiter', '\t', ...
     'VariableNamingRule', 'preserve');
 T = readtable(src, opts);
+% KI-002: a ROI without cells gives an empty table whose columns MATLAB reads
+% as text; make every column numeric so downstream code works unchanged.
+if height(T) == 0
+    for v = T.Properties.VariableNames
+        T.(v{1}) = zeros(0, 1);
+    end
+end
 end
