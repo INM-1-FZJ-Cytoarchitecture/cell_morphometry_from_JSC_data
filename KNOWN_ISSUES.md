@@ -18,3 +18,10 @@ in `registry/runs.tsv` built with a commit that contains the bug and not the fix
 - Cause: an H5 with `num_detections = 0` gives an empty `CellInstances.tsv.gz`; MATLAB reads the empty columns as text. `cmjsc convert` reports such a ROI as `ok`.
 - Found: pmc J0045, B9_x3421_x124_x4a_r_trace_2 (sub-09, 33 Mpx tissue, no cells detected at the JSC), 2026-11-06.
 - Proposed fix: read empty tables as numeric; feature row with n_cells = 0 and NaN shape values; convert flags 0-cell H5 as `empty_h5` (not deletable without review).
+
+## KI-003 · Morphometry cannot find special-trace masks
+- Introduced: 17822b1 (1.0.0) · Status: open (fix proposed, awaiting approval)
+- Symptom: `extraction_inventory.csv` status error `Unable to find file "...\<roi>_mask.tif"` for ROIs with `special_trace = 1` (JBA_TA trace_type e.g. `onlyouter1`); their group is missing from `weighted_morphometric_results` (`weighted_join_diagnostics`: only_texture).
+- Cause: JBA_TA stores the RegionAnnotation of a special trace as `<roi>_special_trace_mask.tif`; `one()` in `build_morphometric_results.m` only looks for `<roi>_mask.tif`. `cmjsc convert` records only `mask_dir`, not the mask file actually used per ROI.
+- Found: vsp 20261106_1133_morphometry (VentralesStriatumPallidum, 6 of 500 ROIs: B10_x4111, B13_x4021, B17_x3016, B4_x4906, B5_x4111, B8_x4381, all VP, include_row = 1), 2026-11-06. 404 instead of 410 weighted groups. BasalGanglia and GP have no special-trace masks.
+- Proposed fix: resolve the mask as `<roi>_mask.tif`, else `<roi>_special_trace_mask.tif` (consistent with the `special_trace` column of `cellseg_labels.tsv`); record the resolved mask file name in `cellseg_labels.tsv` / PROVENANCE; a missing mask stays an error.
