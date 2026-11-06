@@ -13,7 +13,7 @@ in `registry/runs.tsv` built with a commit that contains the bug and not the fix
 
 
 ## KI-002 · ROI without cells breaks the morphometry
-- Introduced: 17822b1 (1.0.0) · Status: fixed in 1.0.2 (see known_issues.tsv)
+- Introduced: 17822b1 (1.0.0) · Status: fixed in dde6681 (1.0.2)
 - Symptom: `extraction_inventory.csv` status error "Conversion to double from cell is not possible"; the group is missing from `weighted_morphometric_results` (`weighted_join_diagnostics`: only_texture).
 - Cause: an H5 with `num_detections = 0` gives an empty `CellInstances.tsv.gz`; MATLAB reads the empty columns as text. `cmjsc convert` reports such a ROI as `ok`.
 - Found: pmc J0045, B9_x3421_x124_x4a_r_trace_2 (sub-09, 33 Mpx tissue, no cells detected at the JSC), 2026-11-06.
