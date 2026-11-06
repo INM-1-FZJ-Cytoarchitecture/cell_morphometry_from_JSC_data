@@ -26,3 +26,11 @@ in `registry/runs.tsv` built with a commit that contains the bug and not the fix
 - Found: vsp 20261106_1133_morphometry (VentralesStriatumPallidum, 6 of 500 ROIs: B10_x4111, B13_x4021, B17_x3016, B4_x4906, B5_x4111, B8_x4381, all VP, include_row = 1), 2026-11-06. 404 instead of 410 weighted groups. BasalGanglia and GP have no special-trace masks.
 - Fix: the mask is resolved as `<roi>_mask.tif`, else `<roi>_special_trace_mask.tif` (MATLAB `one()`, Python `paths.resolve_mask`); `archive_manifest.tsv` records the resolved `mask_path` + `mask_sha256`; a missing mask stays an error. Proof: vsp 20261106_1206_morphometry (same convert run): 500 ok, 0 failed, 410 weighted groups, all matched with texture.
 - Affected runs: vsp 20261106_1133_morphometry (superseded by 20261106_1206_morphometry). Convert runs are unaffected in zip/tsv; only `mask_path`/`mask_sha256` of special-trace ROIs in `archive_manifest.tsv` are wrong there (vsp 20261106_1040_J0037: 6 rows). pmc runs: no special-trace masks were involved (no mask errors in extraction_inventory).
+
+## KI-004 · Convert keeps going when the H5 folder becomes unreachable
+- Introduced: 17822b1 (1.0.0) · Status: open (fix proposed, awaiting approval)
+- Symptom: after a short outage of the network drive (L:) every remaining H5 gets status `error` (`FileNotFoundError ... No such file or directory`) within seconds; the run ends `partial`, EXIT 1, and the registry row shows thousands of errors.
+- Cause: the per-ROI `except` in `convert.py` records the error and moves on; nothing checks whether the H5 folder itself is still reachable.
+- Effect: no wrong data (nothing is written for these ROIs; `error` rows are retried on the next run with the same `--out`), but a long run silently stops doing work.
+- Found: bg `20261106_1040_J0042_BasalGanglia_props_all_masks_drop_multir`, session 1: L: unreachable at 14:31:40, 2558 of 4588 H5 marked error in ~80 s (2030 ok before). H5 visible again at 19:17; resumed as session 2.
+- Proposed fix: if an H5 cannot be opened because the file or folder is missing, check `h5_dir`; if it is unreachable, wait and retry (e.g. up to 30 min), then stop the session cleanly with a clear message instead of marking the rest as error.
