@@ -1,2 +1,3 @@
 issue_id	title	introduced_commit	fixed_commit	affects	status	details
 KI-001	Dirty check ignores registry/runs.tsv only if it is not the first changed file	17822b1	88e4b49	start of convert/morphometry (refuses to run; no data affected)	fixed	git status --porcelain output was stripped; the leading space of the first status code was lost and the path was cut wrong.
+KI-002	Morphometry fails on a ROI without cells (empty CellInstances table read as text)	17822b1		build_morphometric_results: ROI with 0 detections gets no feature row (error), its group is missing from the weighted table	open	pmc J0045: B9_x3421_x124_x4a_r_trace_2 (H5 num_detections=0, include_row=1) -> weighted 819 instead of 820 rows. Also: convert marks a 0-cell H5 as ok; should be flagged.
