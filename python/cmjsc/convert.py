@@ -16,7 +16,7 @@ import yaml
 
 from . import __version__
 from . import feature_sets as FS
-from . import h5io, labels, provenance, rasterize, registry
+from . import h5io, labels, paths, provenance, rasterize, registry
 from .hashing import sha256_file
 
 LEDGER = "cellseg_ledger.tsv"
@@ -303,14 +303,14 @@ def run(args) -> int:
                 continue
             st = p.stat()
             sha = sha256_file(p)
+            mask_file = paths.resolve_mask(args.mask_dir, stem)  # _mask.tif or _special_trace_mask.tif (KI-003)
             mrow = {"roi_stem": stem, "h5_local_path": str(p),
                     "h5_jsc_path_derived": f"{jsc_base}/{h5_dir.name}/{p.name}" if jsc_base else "",
                     "job": job, "size_bytes": st.st_size, "sha256": sha, "mtime": st.st_mtime,
                     "roi_tif_path": str(Path(args.roi_dir) / f"{stem}.tif"),
                     "roi_tif_size_bytes": (Path(args.roi_dir) / f"{stem}.tif").stat().st_size,
-                    "mask_path": str(Path(args.mask_dir) / f"{stem}_mask.tif"),
-                    "mask_sha256": sha256_file(Path(args.mask_dir) / f"{stem}_mask.tif")
-                    if (Path(args.mask_dir) / f"{stem}_mask.tif").exists() else "",
+                    "mask_path": str(mask_file),
+                    "mask_sha256": sha256_file(mask_file) if mask_file.exists() else "",
                     "archive_path": "", "archive_sha256": "", "archive_checked_at": "",
                     "archive_status": ""}
             qc = qc_dir if (args.qc_every and (len(done) + i - 1) % args.qc_every == 0) else None

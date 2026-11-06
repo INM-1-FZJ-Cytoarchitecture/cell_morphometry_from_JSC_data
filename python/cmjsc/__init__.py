@@ -10,4 +10,4 @@ with complete provenance (input paths, SHA-256, git commit, parameters), so the
 large H5 files can be archived and deleted.
 """
 
-__version__ = "1.0.0"
+__version__ = "1.0.2"

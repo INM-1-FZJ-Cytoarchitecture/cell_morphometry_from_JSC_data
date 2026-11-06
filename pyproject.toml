@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cmjsc"
-version = "1.0.0"
+version = "1.0.2"
 description = "JSC cell-segmentation H5 -> CellSegmentations.zip / CellInstances.tsv / cell morphometry, with full provenance"
 requires-python = ">=3.10"
 license = "Apache-2.0"

@@ -194,6 +194,10 @@ try
     stem = row.roi_stem(1);
     tsv = fullfile(seg_dir, stem + "_CellInstances.tsv.gz");
     mask = fullfile(mask_dir, stem + "_mask.tif");
+    if ~isfile(mask)   % JBA_TA special trace: <roi>_special_trace_mask.tif (KI-003)
+        alt = fullfile(mask_dir, stem + "_special_trace_mask.tif");
+        if isfile(alt), mask = alt; end
+    end
     feat = extract_morphometric_features(tsv, mask, row, 'percentile_trim', pt, 'pixel_size_mm', px);
     writetable(feat, fullfile(fv_dir, stem + "_features.csv"));
 catch ME

@@ -2,6 +2,17 @@
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), versions = git tags.
 
+## [1.0.2] - 2026-11-06
+### Fixed
+- KI-003: the RegionAnnotation mask of a JBA_TA special trace is named
+  `<roi>_special_trace_mask.tif`; `build_morphometric_results` (MATLAB) now
+  falls back to that name, and `cmjsc convert` records the resolved mask file
+  and its SHA-256 in `archive_manifest.tsv` (`paths.resolve_mask`). A missing
+  mask is still an error. Test added. Conversion results (zip/tsv) are not
+  affected; morphometry runs with special traces lacked those ROIs
+  (vsp 20261106_1133_morphometry: 6 of 500).
+- Package version bumped to 1.0.2 (`__version__`/pyproject still said 1.0.0 in 1.0.1).
+
 ## [1.0.1] - 2026-11-05
 ### Fixed
 - KI-001: the "uncommitted changes" check misread the first line of

@@ -133,3 +133,16 @@ def test_dirty_check_ignores_registry_first_line(monkeypatch):
     assert provenance.git_state()["dirty"] is False
     monkeypatch.setattr(provenance, "_porcelain", lambda: ["registry/runs.tsv", "python/x.py"])
     assert provenance.git_state()["dirty"] is True
+
+
+def test_special_trace_mask_resolved(job):
+    """KI-003: JBA_TA names the mask of a special trace <roi>_special_trace_mask.tif."""
+    tmp, stem, _ = job
+    (tmp / "masks" / f"{stem}_mask.tif").rename(tmp / "masks" / f"{stem}_special_trace_mask.tif")
+    from cmjsc.paths import resolve_mask
+    assert resolve_mask(tmp / "masks", stem).name == f"{stem}_special_trace_mask.tif"
+    assert resolve_mask(tmp / "masks", "nothing").name == "nothing_mask.tif"
+    _convert(tmp)
+    rows = list(csv.DictReader(open(tmp / "out" / "run1" / "archive_manifest.tsv"), delimiter="\t"))
+    assert rows[0]["mask_path"].endswith(f"{stem}_special_trace_mask.tif")
+    assert len(rows[0]["mask_sha256"]) == 64
