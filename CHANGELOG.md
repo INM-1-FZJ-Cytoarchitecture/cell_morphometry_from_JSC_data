@@ -13,7 +13,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), versions = git
   (vsp 20261106_1133_morphometry: 6 of 500).
 - Package version bumped to 1.0.2 (`__version__`/pyproject still said 1.0.0 in 1.0.1).
 
-## [1.0.2] - 2026-11-06
+## [1.0.3] - 2026-11-06
 ### Fixed
 - KI-002: a ROI without cells (H5 num_detections = 0) broke the MATLAB
   morphometry (empty table read as text). Empty tables are now numeric; the ROI
