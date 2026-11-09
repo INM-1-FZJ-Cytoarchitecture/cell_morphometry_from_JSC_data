@@ -62,6 +62,25 @@ reproduces the JSC regionprops (area, centroid, intensity); `verification.tsv`
 reports per ROI the fraction of cells whose zip area equals the H5 area and a
 zip round trip.
 
+## 1b. Locally segmented ROIs (cellseg) -> same run structure
+
+For a few ROIs it can be easier to segment locally with the canonical engine
+(`F:\GitHub\cell_segmentation`, `cellseg run <roi>.tif -o <dir>\<roi>
+--region-mask <roi>_mask.tif --pixel-size-um 1`) instead of a JSC job. Then
+
+```bat
+.venv\Scripts\cmjsc import-cellseg --cellseg-dir <folder with the cellseg outputs> ^
+  --roi-dir ... --mask-dir ... --exclude-list ... --brains-tsv ... ^
+  --project <code> --out <analysis>\03_cellseg\runs\<YYYYMMDD_HHMM>_local_cellseg
+```
+
+copies the cellseg outputs unchanged into a run folder that
+`build_morphometric_results` reads like a convert run (`import_manifest.tsv`
+holds the SHA-256 of every source file, `detection_manifests/` the model and
+inference parameters per ROI). Report locally and JSC-segmented ROIs as two
+segmentation runs: the local engine documents tile/stride in its manifest, the
+JSC job does not.
+
 ## 2. Archive, then delete
 
 ```bat

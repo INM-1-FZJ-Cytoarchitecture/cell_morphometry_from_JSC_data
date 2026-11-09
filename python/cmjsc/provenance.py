@@ -82,7 +82,7 @@ def write_markdown(prov: dict, path):
     ]
     for k, v in prov["inputs"].items():
         lines.append(f"- {k}: {v}")
-    lines += ["", "## Segmentation (from JSC job YAML)"]
+    lines += ["", "## " + prov.get("segmentation_title", "Segmentation (from JSC job YAML)")]
     for k, v in prov["segmentation"].items():
         lines.append(f"- {k}: {v}")
     lines += ["", "## Parameters"]
@@ -92,6 +92,10 @@ def write_markdown(prov: dict, path):
         lines += ["", "## Summary"]
         for k, v in prov["summary"].items():
             lines.append(f"- {k}: {v}")
-    lines += ["", "Per-file hashes: `archive_manifest.tsv`; per-ROI checks: `verification.tsv`;"
-              " per-ROI status: `cellseg_ledger.tsv`."]
+    if "summary" in prov and "rois_imported" in prov["summary"]:
+        lines += ["", "Per-file hashes: `import_manifest.tsv`; per-ROI status: `cellseg_ledger.tsv`;"
+                  " segmentation provenance per ROI: `detection_manifests/`."]
+    else:
+        lines += ["", "Per-file hashes: `archive_manifest.tsv`; per-ROI checks: `verification.tsv`;"
+                  " per-ROI status: `cellseg_ledger.tsv`."]
     open(path, "w", encoding="utf-8").write("\n".join(lines) + "\n")

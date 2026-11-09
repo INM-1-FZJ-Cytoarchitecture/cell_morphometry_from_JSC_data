@@ -1,4 +1,4 @@
-"""Command line: cmjsc convert | archive | check-affected | feature-sets."""
+"""Command line: cmjsc convert | import-cellseg | archive | check-affected | feature-sets."""
 from __future__ import annotations
 
 import argparse
@@ -33,6 +33,18 @@ def main(argv=None) -> int:
     c.add_argument("--limit", type=int, default=0)
     c.add_argument("--allow-dirty", action="store_true")
 
+    m = sub.add_parser("import-cellseg", help="local cellseg outputs -> run folder (as convert)")
+    m.add_argument("--cellseg-dir", required=True, help="folder with cellseg outputs (<roi>_CellInstances.tsv, searched recursively)")
+    m.add_argument("--roi-dir", required=True, help="high_resolution_ROIs (recorded for provenance)")
+    m.add_argument("--mask-dir", required=True, help="high_resolution_ROIs_masks (recorded for provenance)")
+    m.add_argument("--exclude-list", help="JBA_TA exclude list (_edit.xlsx) for include_row")
+    m.add_argument("--brains-tsv", help="table b_code_OST -> pm_id, sub_id")
+    m.add_argument("--out", required=True, help="run folder <analysis>/03_cellseg/runs/<YYYYMMDD_HHMM>_<job>")
+    m.add_argument("--project", default="")
+    m.add_argument("--job", help="job name (default: name of --cellseg-dir)")
+    m.add_argument("--features", default=None, help="feature set whose columns must be present")
+    m.add_argument("--allow-dirty", action="store_true")
+
     a = sub.add_parser("archive", help="verify archived H5 copies and write loeschbar.tsv")
     a.add_argument("--run", required=True, help="run folder of cmjsc convert")
     a.add_argument("--archive-dir", required=True, help="folder with the archived H5 (searched recursively)")
@@ -44,6 +56,9 @@ def main(argv=None) -> int:
     args = ap.parse_args(argv)
     if args.cmd == "convert":
         from .convert import run
+        return run(args)
+    if args.cmd == "import-cellseg":
+        from .import_cellseg import run
         return run(args)
     if args.cmd == "archive":
         from .archive import run

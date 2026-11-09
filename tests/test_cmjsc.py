@@ -167,3 +167,53 @@ def test_empty_h5_is_flagged(job):
     assert ver[0]["status"] == "empty_h5" and ver[0]["n_cells_h5"] == "0"
     df = pd.read_csv(run / "cell_segmentations" / f"{stem}_CellInstances.tsv.gz", sep="\t")
     assert len(df) == 0 and "cell_area_px" in df.columns
+
+
+def _fake_cellseg(tmp, stem, n=3, model_sha="abc"):
+    d = tmp / "cellseg_out" / stem
+    d.mkdir(parents=True)
+    cols = ["cell_id", "x_px", "y_px", "cell_area_px", "cell_perimeter", "cell_eccentricity",
+            "cell_solidity", "cell_feret_diameter_max", "cell_intensity_mean", "cell_intensity_std",
+            "cell_detection_score"]
+    rows = [[i + 1, 10.0 + i, 20.0, 30.0, 18.0, 0.5, 0.9, 7.0, 80.0, 10.0, 0.99] for i in range(n)]
+    pd.DataFrame(rows, columns=cols).to_csv(d / f"{stem}_CellInstances.tsv", sep="\t", index=False)
+    (d / f"{stem}_CellSegmentations.zip").write_bytes(b"PK\x05\x06" + b"\x00" * 18)
+    man = {"metadata": {"model_name": "vacumu_CpnResNeXt101UNet-f33b2634bb51f299.pt",
+                        "model_sha256": model_sha, "inference": {"tile_size": 1024, "stride": 896},
+                        "props": {"properties": ["area"]}, "generated_by": {"Name": "cellseg"}}}
+    json.dump(man, open(d / "detection_manifest.json", "w"))
+    return d
+
+
+def test_import_cellseg(job):
+    """import-cellseg gathers local cellseg outputs into a convert-like run folder."""
+    tmp, stem, _ = job
+    _fake_cellseg(tmp, stem)
+    from cmjsc.cli import main
+    rc = main(["import-cellseg", "--cellseg-dir", str(tmp / "cellseg_out"), "--roi-dir", str(tmp / "rois"),
+               "--mask-dir", str(tmp / "masks"), "--out", str(tmp / "out" / "imp"), "--allow-dirty"])
+    assert rc == 0
+    run = tmp / "out" / "imp"
+    T = pd.read_csv(run / "cell_segmentations" / f"{stem}_CellInstances.tsv.gz", sep="\t")
+    assert len(T) == 3 and list(T.cell_id) == [1, 2, 3]
+    L = pd.read_csv(run / "cellseg_labels.tsv", sep="\t")
+    assert list(L.roi_stem) == [stem]
+    prov = json.load(open(run / "PROVENANCE.json"))
+    assert prov["status"] == "complete"
+    assert prov["segmentation"]["parameters"]["inference"]["stride"] == 896
+    m = list(csv.DictReader(open(run / "import_manifest.tsv"), delimiter="\t"))
+    assert len(m[0]["source_tsv_sha256"]) == 64 and len(m[0]["mask_sha256"]) == 64
+
+
+def test_import_cellseg_rejects_missing_columns_and_mixed_params(job):
+    tmp, stem, _ = job
+    d = _fake_cellseg(tmp, stem)
+    T = pd.read_csv(d / f"{stem}_CellInstances.tsv", sep="\t").drop(columns=["cell_feret_diameter_max"])
+    T.to_csv(d / f"{stem}_CellInstances.tsv", sep="\t", index=False)
+    _fake_cellseg(tmp, "B1_x100_x123_x4p_l_trace_2_xorigin_256_yorigin_512", model_sha="other")
+    from cmjsc.cli import main
+    rc = main(["import-cellseg", "--cellseg-dir", str(tmp / "cellseg_out"), "--roi-dir", str(tmp / "rois"),
+               "--mask-dir", str(tmp / "masks"), "--out", str(tmp / "out" / "imp"), "--allow-dirty"])
+    assert rc == 1
+    led = {r["roi_stem"]: r for r in csv.DictReader(open(tmp / "out" / "imp" / "cellseg_ledger.tsv"), delimiter="\t")}
+    assert led[stem]["status"] == "error" and "cell_feret_diameter_max" in led[stem]["message"]

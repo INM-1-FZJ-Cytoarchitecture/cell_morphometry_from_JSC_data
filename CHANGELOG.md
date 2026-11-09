@@ -2,6 +2,20 @@
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), versions = git tags.
 
+## [1.1.0] - 2026-11-09
+### Added
+- `cmjsc import-cellseg`: gathers ROIs segmented locally with the canonical
+  engine (F:\GitHub\cell_segmentation, `cellseg run`) into the same run
+  structure as `cmjsc convert` (`cell_segmentations/<roi>_CellInstances.tsv.gz`
+  + `CellSegmentations.zip`, `cellseg_labels.tsv`, `cellseg_ledger.tsv`,
+  `import_manifest.tsv` with SHA-256 of every source file, the per-ROI
+  `detection_manifest.json`, PROVENANCE, registry line), so
+  `build_morphometric_results` treats JSC-converted and locally segmented ROIs
+  identically. Cell values are copied unchanged; the columns required by the
+  feature set are checked; segmentation parameters (model + SHA-256,
+  tile/stride, regionprops set) must be identical across the imported ROIs.
+  Tests added. Existing commands are unchanged.
+
 ## [1.0.2] - 2026-11-06
 ### Fixed
 - KI-003: the RegionAnnotation mask of a JBA_TA special trace is named
