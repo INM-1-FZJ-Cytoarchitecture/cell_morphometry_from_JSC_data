@@ -36,7 +36,7 @@ in `registry/runs.tsv` built with a commit that contains the bug and not the fix
 - Proposed fix: if an H5 cannot be opened because the file or folder is missing, check `h5_dir`; if it is unreachable, wait and retry (e.g. up to 30 min), then stop the session cleanly with a clear message instead of marking the rest as error.
 
 ## KI-005 · JBA_TA masks are read inverted outside MATLAB (JSC masked jobs measure the surrounding tissue)
-- Introduced: 17822b1 (1.0.0, no check) · Root cause: JBA_TA `found_issues` I-023 · Status: open (fix proposed, awaiting approval)
+- Introduced: 17822b1 (1.0.0, no check) · Root cause: JBA_TA `found_issues` I-023 · Status: guarded in 1.2.0 (27d3bd6: `mask_mismatch` check); data must be re-segmented with corrected masks
 - Symptom: the cell centroids of a converted ROI lie outside its `<roi>_mask.tif` (as read in MATLAB); densities, sizes, shapes and spatial indices describe the tissue around the annotation.
 - Cause: JBA_TA writes regular masks as 1-bit TIFF with `PhotometricInterpretation = WhiteIsZero`. MATLAB honours it (true = annotation); tifffile (Python) returns the raw bits (photometric MINISWHITE ignored), so the jobbox job `celldetection-inference-masked` (and `cellseg --region-mask`) treat the annotation as background and, with `drop_background: yes`, keep only the cells around it. Special-trace masks are 8-bit `BlackIsZero` and are read correctly. cmjsc never checked that the cells lie in the mask.
 - Evidence: Alexey VSP J0037, 12 random ROIs: 11 with 99.8–100 % of centroids outside the MATLAB mask (median distance to the annotation e.g. 465 px), the one special-trace ROI 99.9 % inside. B1_x3211 cdm r trace 5: MATLAB 4.3 % of the crop is annotation, tifffile 95.75 %.
@@ -44,7 +44,8 @@ in `registry/runs.tsv` built with a commit that contains the bug and not the fix
 - Proposed fix: (1) JBA_TA writes 8-bit masks (I-023) and a converter writes corrected copies for existing projects; (2) `cmjsc convert` checks per ROI the fraction of centroids inside the mask (MATLAB semantics) and flags `mask_mismatch`; (3) affected projects are re-segmented with corrected masks.
 
 ## KI-006 · voronoi_area_cv: border cells dominate, missing above 80 000 cells
-- Introduced: 17822b1 (1.0.0) · Status: open (fix proposed, awaiting approval)
+- Introduced: 17822b1 (1.0.0) · Fixed: 27d3bd6 (1.2.0)
 - Symptom: voronoi_area_cv takes values 2.7–269 (median ~62) in BG/VSP and correlates with log(n_cells) (r = 0.71); it is NaN for every ROI with more than 80 000 cells (257 of 2777 groups in BG/VSP, mostly ts/cdm/pm/pl).
 - Cause: Voronoi polygons of the cells at the border of the point set are only bounded by the convex hull of all points (only cells touching infinity are skipped); a 130 395-cell ROI gives a maximum Voronoi area of 3·10^10 µm² and CV 172. The cell limit `n_loc <= 80000` was set for run time.
-- Proposed fix: use only cells whose Voronoi polygon lies completely inside the region mask (minus-sampling edge correction), remove the upper cell limit (a 130 k-cell ROI takes ~5 s), report the number of cells used.
+- Fix: only cells whose Voronoi polygon lies completely inside the region mask (minus-sampling edge correction), no upper cell limit, new column `voronoi_n_cells_used`. Proof: VSP B17_x3016 VP (special trace, cells inside the mask) CV 0.55 from 6125/6665 cells.
+- Affected runs: every morphometry run before 1.2.0 (`cmjsc check-affected`), including earlier Thalamus results computed with the same `extract_morphometric_features.m` logic.
