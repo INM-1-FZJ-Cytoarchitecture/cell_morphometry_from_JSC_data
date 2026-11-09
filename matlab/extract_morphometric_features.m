@@ -89,7 +89,7 @@ if mask_area_mm2 > 0
     total_cell_area_fraction = nansum_(area_um2) / (mask_area_mm2 * 1e6);
 end
 
-nn_mean_um = NaN; nn_sd_um = NaN; clark_evans_R = NaN; voronoi_cv = NaN;
+nn_mean_um = NaN; nn_sd_um = NaN; clark_evans_R = NaN; voronoi_cv = NaN; voronoi_n_used = 0;
 ok_loc = isfinite(x_px) & isfinite(y_px);
 if sum(ok_loc) >= 2
     P = [x_px(ok_loc), y_px(ok_loc)] * px_um;
@@ -101,19 +101,29 @@ if sum(ok_loc) >= 2
         expected_mm = 0.5 * sqrt(mask_area_mm2 / n_loc);
         if expected_mm > 0, clark_evans_R = (nn_mean_um * 1e-3) / expected_mm; end
     end
-    if n_loc >= 4 && n_loc <= 80000
+    % Voronoi area CV with edge correction (KI-006, since 1.2.0): only cells whose
+    % Voronoi polygon lies completely inside the RegionAnnotation (all vertices in
+    % the mask; minus-sampling). Border cells, whose polygons are bounded only by
+    % the convex hull of the point set, no longer enter. No upper cell limit
+    % (was n <= 80000).
+    if n_loc >= 4
         try
             DT = delaunayTriangulation(P);
             [V, R] = voronoiDiagram(DT);
+            [mh, mw] = size(mask);
+            vc = round(V(:,1) / px_um) + 1; vr = round(V(:,2) / px_um) + 1;   % um -> 1-based px (skimage 0-based)
+            vin = all(isfinite(V), 2) & vc >= 1 & vc <= mw & vr >= 1 & vr <= mh;
+            vmask = false(size(V, 1), 1);
+            vmask(vin) = mask(sub2ind([mh mw], vr(vin), vc(vin)));
             areas = nan(numel(R), 1);
             for k = 1:numel(R)
                 idx = R{k};
-                if any(idx == 1), continue; end
-                poly = V(idx, :);
-                if size(poly, 1) >= 3, areas(k) = polyarea(poly(:,1), poly(:,2)); end
+                if numel(idx) < 3 || any(idx == 1) || ~all(vmask(idx)), continue; end
+                areas(k) = polyarea(V(idx,1), V(idx,2));
             end
             areas = areas(isfinite(areas) & areas > 0);
-            if numel(areas) >= 5, voronoi_cv = std(areas) / mean(areas); end
+            voronoi_n_used = numel(areas);
+            if voronoi_n_used >= 5, voronoi_cv = std(areas) / mean(areas); end
         catch
         end
     end
@@ -161,6 +171,7 @@ s.nn_dist_mean_um = nn_mean_um;
 s.nn_dist_sd_um = nn_sd_um;
 s.clark_evans_R = clark_evans_R;
 s.voronoi_area_cv = voronoi_cv;
+s.voronoi_n_cells_used = voronoi_n_used;
 feat = struct2table(s);
 end
 

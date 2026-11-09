@@ -28,6 +28,8 @@ def main(argv=None) -> int:
     c.add_argument("--min-area-exact", type=float, default=0.95,
                    help="min. fraction of cells whose rasterised area equals the H5 area")
     c.add_argument("--min-age-min", type=float, default=5.0, help="skip H5 modified less than N minutes ago")
+    c.add_argument("--min-in-mask", type=float, default=0.9,
+                   help="min. fraction of cell centroids inside the RegionAnnotation mask, else status mask_mismatch (KI-005)")
     c.add_argument("--qc-every", type=int, default=100, help="QC overlay for every n-th ROI (0 = off)")
     c.add_argument("--pattern", default="*.h5", help="glob for H5 names (e.g. B1_*.h5)")
     c.add_argument("--limit", type=int, default=0)
@@ -43,6 +45,8 @@ def main(argv=None) -> int:
     m.add_argument("--project", default="")
     m.add_argument("--job", help="job name (default: name of --cellseg-dir)")
     m.add_argument("--features", default=None, help="feature set whose columns must be present")
+    m.add_argument("--min-in-mask", type=float, default=0.9,
+                   help="min. fraction of cell centroids inside the RegionAnnotation mask, else status mask_mismatch")
     m.add_argument("--allow-dirty", action="store_true")
 
     a = sub.add_parser("archive", help="verify archived H5 copies and write loeschbar.tsv")

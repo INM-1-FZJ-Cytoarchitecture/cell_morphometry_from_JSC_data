@@ -33,17 +33,18 @@ import pandas as pd
 
 from . import __version__
 from . import feature_sets as FS
-from . import labels, paths, provenance, registry
+from . import labels, masks, paths, provenance, registry
 from .convert import _append, _dedupe, _read_tsv, _setup_logging
 from .hashing import sha256_file
 
 LEDGER = "cellseg_ledger.tsv"
 MANIFEST = "import_manifest.tsv"
-LEDGER_F = ["roi_stem", "status", "n_cells", "n_layers", "seconds", "finished", "message"]
+LEDGER_F = ["roi_stem", "status", "n_cells", "n_layers", "seconds", "frac_cells_in_mask", "finished", "message"]
 MANIFEST_F = ["roi_stem", "source_tsv", "source_tsv_sha256", "source_zip", "source_zip_sha256",
               "detection_manifest", "detection_manifest_sha256", "model_name", "model_sha256",
               "roi_tif_path", "roi_tif_size_bytes", "mask_path", "mask_sha256"]
 DONE = {"ok", "empty_cellseg"}
+SKIP_ON_RESUME = DONE | {"mask_mismatch"}
 
 # H5/regionprops name in config/feature_sets.yaml -> column written by cellseg
 _COLMAP = {"centroid-0": "y_px", "centroid-1": "x_px", "area": "cell_area_px"}
@@ -109,7 +110,7 @@ def run(args) -> int:
                 "segmentation": {"source": "local cellseg (F:\\GitHub\\cell_segmentation)"},
                 "parameters": {"feature_set": fs["name"], "feature_set_sha256": fs["sha256"],
                                "feature_set_definition": fs["definition"],
-                               "required_columns": need,
+                               "required_columns": need, "min_in_mask": args.min_in_mask,
                                "note": "cell values copied unchanged from cellseg CellInstances.tsv"},
                 "sessions": []}
     elif prov["parameters"]["feature_set_sha256"] != fs["sha256"]:
@@ -120,7 +121,7 @@ def run(args) -> int:
     prov["status"] = "running"
     provenance.write_json(prov, prov_path)
 
-    done = {r["roi_stem"] for r in _read_tsv(out_dir / LEDGER) if r["status"] in DONE}
+    done = {r["roi_stem"] for r in _read_tsv(out_dir / LEDGER) if r["status"] in SKIP_ON_RESUME}
     todo = [s for s in src if s not in done]
     log.info("cmjsc %s (%s) import-cellseg | feature set %s | %d ROIs in %s | done %d | to do %d",
              __version__, git["describe"], fs["name"], len(src), args.cellseg_dir, len(done), len(todo))
@@ -149,6 +150,10 @@ def run(args) -> int:
             if miss:
                 raise ValueError(f"CellInstances.tsv lacks columns {miss} (feature set {fs['name']})")
             n = sum(1 for _ in open(tsv, encoding="utf-8")) - 1
+            xy = pd.read_csv(tsv, sep="\t", usecols=["x_px", "y_px"])
+            frac_in, mask_ok = masks.check_cells_in_mask(paths.resolve_mask(args.mask_dir, stem),
+                                                         xy["x_px"].to_numpy(), xy["y_px"].to_numpy(),
+                                                         args.min_in_mask)
             with open(tsv, "rb") as fi, gzip.open(seg_dir / f"{stem}_CellInstances.tsv.gz", "wb") as fo:
                 shutil.copyfileobj(fi, fo)
             shutil.copy2(zp, seg_dir / zp.name)
@@ -165,12 +170,13 @@ def run(args) -> int:
                 "model_name": sp["model_name"], "model_sha256": sp["model_sha256"],
                 "roi_tif_path": str(roi), "roi_tif_size_bytes": roi.stat().st_size if roi.exists() else "",
                 "mask_path": str(mask), "mask_sha256": sha256_file(mask) if mask.exists() else ""})
-            st = "ok" if n > 0 else "empty_cellseg"
+            st = "empty_cellseg" if n == 0 else ("ok" if mask_ok else "mask_mismatch")
             _append(out_dir / LEDGER, LEDGER_F, {"roi_stem": stem, "status": st, "n_cells": n,
                     "n_layers": "", "seconds": round(time.time() - t0, 1),
+                    "frac_cells_in_mask": f"{frac_in:.4f}",
                     "finished": provenance.now(), "message": ""})
             n_ok += 1
-            log.info("[%d/%d] %s: %s | %d cells", i, len(todo), stem, st, n)
+            log.info("[%d/%d] %s: %s | %d cells, in mask %.4f", i, len(todo), stem, st, n, frac_in)
         except Exception as e:  # record and continue
             n_err += 1
             _append(out_dir / LEDGER, LEDGER_F, {"roi_stem": stem, "status": "error",

@@ -16,7 +16,7 @@ import yaml
 
 from . import __version__
 from . import feature_sets as FS
-from . import h5io, labels, paths, provenance, rasterize, registry
+from . import h5io, labels, masks, paths, provenance, rasterize, registry
 from .hashing import sha256_file
 
 LEDGER = "cellseg_ledger.tsv"
@@ -28,8 +28,12 @@ MANIFEST_F = ["roi_stem", "h5_local_path", "h5_jsc_path_derived", "job", "size_b
               "archive_path", "archive_sha256", "archive_checked_at", "archive_status"]
 VERIF_F = ["roi_stem", "n_cells_h5", "n_cells_zip", "n_empty_polygons", "n_layers",
            "zip_roundtrip_exact", "frac_area_exact", "n_area_diff", "max_abs_area_diff",
-           "h5_bytes", "zip_bytes", "tsv_bytes", "density_bytes", "output_fraction_of_h5", "status"]
+           "h5_bytes", "zip_bytes", "tsv_bytes", "density_bytes", "output_fraction_of_h5",
+           "frac_cells_in_mask", "status"]
 DONE = {"ok", "verify_warn", "empty_h5"}
+# converted, but the cells do not lie in the RegionAnnotation (KI-005): not re-done on
+# resume, not passed on to the morphometry (not in cellseg_labels.tsv)
+SKIP_ON_RESUME = DONE | {"mask_mismatch"}
 
 log = logging.getLogger("cmjsc")
 
@@ -130,6 +134,9 @@ def process_roi(h5_path, stem, roi_dir, mask_dir, seg_dir, qc_dir, fs, opt, prov
             continue
         name = FS.RENAME.get(c, "cell_" + c)
         df[name] = data[c]
+    mask_file = paths.resolve_mask(mask_dir, stem)
+    frac_in, mask_ok = masks.check_cells_in_mask(mask_file, df["x_px"].to_numpy(), df["y_px"].to_numpy(),
+                                                 opt.get("min_in_mask", 0.9))
     tail = [c for c in ("cell_detection_score", "region_id") if c in df.columns]
     df = df[[c for c in df.columns if c not in tail] + tail]
     tsv = seg_dir / f"{stem}_CellInstances.tsv.gz"
@@ -192,7 +199,8 @@ def process_roi(h5_path, stem, roi_dir, mask_dir, seg_dir, qc_dir, fs, opt, prov
            "max_abs_area_diff": int(np.abs(diff).max()) if n else 0, "h5_bytes": h5b,
            "zip_bytes": zb, "tsv_bytes": tb, "density_bytes": density_bytes,
            "output_fraction_of_h5": f"{(zb + tb + density_bytes) / h5b:.4f}",
-           "status": "empty_h5" if n == 0 else ("ok" if ok else "verify_warn")}
+           "frac_cells_in_mask": f"{frac_in:.4f}",
+           "status": "empty_h5" if n == 0 else ("mask_mismatch" if not mask_ok else ("ok" if ok else "verify_warn"))}
     return ver, time.time() - t0
 
 
@@ -258,6 +266,7 @@ def run(args) -> int:
                                "feature_set_definition": fs["definition"],
                                "pixel_size_um": args.pixel_size_um, "density": args.density,
                                "min_area_exact": args.min_area_exact, "min_age_min": args.min_age_min,
+                               "min_in_mask": args.min_in_mask,
                                "rasterization": "skimage.draw.polygon"},
                 "sessions": []}
     else:
@@ -271,7 +280,7 @@ def run(args) -> int:
     if args.yaml:
         shutil.copy2(args.yaml, out_dir / Path(args.yaml).name)
 
-    done = {r["roi_stem"] for r in _read_tsv(out_dir / LEDGER) if r["status"] in DONE}
+    done = {r["roi_stem"] for r in _read_tsv(out_dir / LEDGER) if r["status"] in SKIP_ON_RESUME}
     now = time.time()
     files = sorted(p for p in h5_dir.glob(args.pattern) if p.suffix == ".h5" and not p.name.startswith("."))
     todo, waiting = [], []
@@ -289,7 +298,7 @@ def run(args) -> int:
              len(waiting))
 
     opt = {"pixel_size_um": args.pixel_size_um, "density": args.density,
-           "min_area_exact": args.min_area_exact}
+           "min_area_exact": args.min_area_exact, "min_in_mask": args.min_in_mask}
     jsc_base = (yinfo.get("jsc_output") or "").rstrip("/")
     n_ok = n_err = 0
     for i, p in enumerate(todo, 1):
@@ -325,9 +334,9 @@ def run(args) -> int:
                     "n_cells": ver["n_cells_h5"], "n_layers": ver["n_layers"],
                     "seconds": f"{sec:.1f}", "finished": provenance.now(), "message": ""})
             n_ok += 1
-            log.info("[%d/%d] %s: %s | %d cells, %d layers, area exact %s, out %s of H5, %.0f s",
+            log.info("[%d/%d] %s: %s | %d cells, %d layers, area exact %s, in mask %s, out %s of H5, %.0f s",
                      i, len(todo), stem, ver["status"], ver["n_cells_h5"], ver["n_layers"],
-                     ver["frac_area_exact"], ver["output_fraction_of_h5"], sec)
+                     ver["frac_area_exact"], ver["frac_cells_in_mask"], ver["output_fraction_of_h5"], sec)
         except Exception as e:  # keep going, record the error
             n_err += 1
             _append(out_dir / LEDGER, LEDGER_F, {"roi_stem": stem, "status": "error",

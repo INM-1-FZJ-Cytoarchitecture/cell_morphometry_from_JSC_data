@@ -57,6 +57,12 @@ Per run: `PROVENANCE.json/.md`, copy of the job YAML, `archive_manifest.tsv`
 constant (regionprops on one-cell masks) and ignored; positions are skimage
 `centroid-0/1` (y/x), never CPN `location`.
 
+**Mask check (KI-005):** the cell centroids of every ROI must lie inside its
+RegionAnnotation (`--min-in-mask`, default 0.9), read like MATLAB does
+(JBA_TA 1-bit masks are TIFF `WhiteIsZero`; tifffile alone would invert them).
+Otherwise the ROI gets `mask_mismatch` and is not passed to the morphometry.
+For JSC jobs use 8-bit masks (JBA_TA `convert_masks_to_uint8`).
+
 **Rasterisation:** `skimage.draw.polygon` (pixel centre inside the contour). It
 reproduces the JSC regionprops (area, centroid, intensity); `verification.tsv`
 reports per ROI the fraction of cells whose zip area equals the H5 area and a
@@ -100,7 +106,8 @@ build_morphometric_results('convert_run', RUN, 'mask_dir', MASKS, ...
 ```
 Features per ROI as in the Thalamus morphometry (density/mm², area distribution,
 circularity 4πA/P², eccentricity, solidity, Feret, intensity, NN distance,
-Clark-Evans R, Voronoi CV), positions from centroid; weighted means with the
+Clark-Evans R, Voronoi CV with edge correction: only cells whose Voronoi polygon lies inside the
+RegionAnnotation), positions from centroid; weighted means with the
 JBA_TA `calculate_wmean` logic (include_row filter, groups brain/section/
 OST_label/OST_id/side, weight = mask area).
 

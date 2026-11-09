@@ -217,3 +217,30 @@ def test_import_cellseg_rejects_missing_columns_and_mixed_params(job):
     assert rc == 1
     led = {r["roi_stem"]: r for r in csv.DictReader(open(tmp / "out" / "imp" / "cellseg_ledger.tsv"), delimiter="\t")}
     assert led[stem]["status"] == "error" and "cell_feret_diameter_max" in led[stem]["message"]
+
+
+def test_read_mask_white_is_zero(tmp_path):
+    """JBA_TA 1-bit WhiteIsZero masks must read as True = annotation (KI-005 / I-023)."""
+    from cmjsc.masks import read_mask, frac_inside
+    m = np.zeros((40, 50), bool)
+    m[10:20, 5:25] = True
+    tifffile.imwrite(tmp_path / "wiz.tif", ~m, photometric="miniswhite")
+    tifffile.imwrite(tmp_path / "u8.tif", m.astype(np.uint8) * 255, photometric="minisblack")
+    assert (read_mask(tmp_path / "wiz.tif") == m).all()
+    assert (read_mask(tmp_path / "u8.tif") == m).all()
+    assert frac_inside(m, [10, 30], [15, 15]) == 0.5
+
+
+def test_convert_flags_cells_outside_mask(job):
+    """Cells outside the RegionAnnotation -> mask_mismatch, not passed to the labels (KI-005)."""
+    tmp, stem, _ = job
+    m = np.zeros((300, 400), np.uint8)
+    m[250:, 300:] = 1                                  # annotation far away from all cells
+    tifffile.imwrite(tmp / "masks" / f"{stem}_mask.tif", m)
+    assert _convert(tmp) in (0, 1)
+    run = tmp / "out" / "run1"
+    led = list(csv.DictReader(open(run / "cellseg_ledger.tsv"), delimiter="\t"))
+    assert led[-1]["status"] == "mask_mismatch"
+    ver = list(csv.DictReader(open(run / "verification.tsv"), delimiter="\t"))
+    assert float(ver[-1]["frac_cells_in_mask"]) == 0.0
+    assert not (run / "cellseg_labels.tsv").exists()

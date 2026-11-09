@@ -2,6 +2,25 @@
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), versions = git tags.
 
+## [1.2.0] - 2026-11-09
+### Fixed
+- KI-006: `voronoi_area_cv` used every finite Voronoi polygon, so cells at the
+  border of the point set (bounded only by the convex hull) dominated the CV
+  (BG/VSP: values 2.7-269, r = 0.71 with log n_cells), and it was NaN above
+  80 000 cells. Now only cells whose Voronoi polygon lies completely inside the
+  RegionAnnotation enter (minus-sampling edge correction), no upper cell limit;
+  new column `voronoi_n_cells_used`. Proof: VSP B17_x3016 VP (special trace,
+  cells inside the mask): CV 0.55 from 6125 of 6665 cells, 0.7 s; a 130 395-cell
+  ROI takes ~5 s. All other features unchanged.
+### Added
+- KI-005 guard: `cmjsc convert` and `cmjsc import-cellseg` check per ROI the
+  fraction of cell centroids inside the RegionAnnotation mask, read with the
+  same semantics as MATLAB (`masks.read_mask` honours TIFF WhiteIsZero, JBA_TA
+  I-023). Below `--min-in-mask` (default 0.9) the ROI gets status
+  `mask_mismatch`: it is not redone on resume and not passed to the
+  morphometry (`cellseg_labels.tsv`); `verification.tsv` / the ledger report
+  `frac_cells_in_mask`. Tests added.
+
 ## [1.1.0] - 2026-11-09
 ### Added
 - `cmjsc import-cellseg`: gathers ROIs segmented locally with the canonical
